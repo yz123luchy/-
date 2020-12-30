@@ -1,0 +1,45 @@
+#导入相关模型
+import lightgbm as lgb
+from bayes_opt import BayesianOptimization
+import warnings
+warnings.filterwarnings("ignore")
+from sklearn.datasets import make_classification
+
+#创建数据样本
+X, y = make_classification(n_samples=10000,n_features=20,n_classes=2,random_state=2)
+data = lgb.Dataset(X,y)
+
+
+#lgbm交叉验证模型
+def lgb_cv(feature_fraction,bagging_fraction,min_data_in_leaf,max_depth,min_split_gain,num_leaves,lambda_l1,lambda_l2,num_iterations=1000):
+        params = {'objective':'binary','num_iterations': num_iterations, 'early_stopping_round':50, 'metric':'l1'}
+        params['feature_fraction'] = max(min(feature_fraction, 1), 0)
+        params['bagging_fraction'] = max(min(bagging_fraction, 1), 0)
+        params["min_data_in_leaf"] = int(round(min_data_in_leaf))
+        params['max_depth'] = int(round(max_depth))
+        params['min_split_gain'] = min_split_gain      
+        params["num_leaves"] = int(round(num_leaves))
+        params['lambda_l1'] = max(lambda_l1, 0)
+        params['lambda_l2'] = max(lambda_l2, 0)
+        
+        cv_result = lgb.cv(params, data, nfold=5, seed=2, stratified=True, verbose_eval =50)
+        return -(min(cv_result['l1-mean']))
+        
+        
+lgb_bo = BayesianOptimization(
+        lgb_cv,
+        {'feature_fraction': (0.5, 1),
+        'bagging_fraction': (0.5, 1),
+        'min_data_in_leaf': (1,100),
+        'max_depth': (3, 15),
+         'min_split_gain': (0, 5),
+         'num_leaves': (16, 128),
+         'lambda_l1': (0, 100),
+         'lambda_l2': (0, 100)}
+    )       
+    
+lgb_bo.maximize(init_points=21,n_iter=90) #init_points表示初始点，n_iter代表迭代次数（即采样数）
+
+#打印最佳参数
+print (lgb_bo.max)
+    
